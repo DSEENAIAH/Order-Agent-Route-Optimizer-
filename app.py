@@ -20,7 +20,7 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Flask config
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '9d7eb48fb46ab3d4b1661ba36e6947d4')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', ' ')
 
 # Admin credentials (only one admin allowed)
 ADMIN_EMAIL = "99220041514@klu.ac.in"

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports | Delivery Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-card {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .stats-card h2 {
+            font-size: 2.5rem;
+            margin-bottom: 0;
+        }
+        .stats-card p {
+            font-size: 1.1rem;
+            margin-bottom: 0;
+        }
+        .stats-total { background-color: #cfe2ff; }
+        .stats-completed { background-color: #d1e7dd; }
+        .stats-pending { background-color: #f8d7da; }
+        .stats-assigned { background-color: #fff3cd; }
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 300px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Delivery Management System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('add_order') }}">Add Order</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('reports') }}">Reports</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="navbar-text me-3">Welcome, {{ session['user']['username'] }}</span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row mb-4">
+            <div class="col">
+                <h1>Delivery Reports</h1>
+                <p class="lead">Analyze delivery performance and statistics</p>
+            </div>
+        </div>
+
+        <!-- Date Range Filter -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Filter Reports</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" action="{{ url_for('reports') }}" class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">From Date</label>
+                        <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">To Date</label>
+                        <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-filter"></i> Apply Filters
+                        </button>
+                        <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary ms-2">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card stats-total">
+                    <h2>{{ total_orders }}</h2>
+                    <p>Total Orders</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-completed">
+                    <h2>{{ completed_orders }}</h2>
+                    <p>Completed Orders</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-assigned">
+                    <h2>{{ assigned_orders }}</h2>
+                    <p>Assigned Orders</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card stats-pending">
+                    <h2>{{ pending_orders }}</h2>
+                    <p>Pending Orders</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <!-- Orders by Status Chart -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Orders by Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Orders by Area Chart -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Orders by Area</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="areaChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Area Statistics Table -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Area Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Area</th>
+                                <th>Total Orders</th>
+                                <th>Completed</th>
+                                <th>Assigned</th>
+                                <th>Pending</th>
+                                <th>Completion Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for area, stats in area_stats.items() %}
+                                <tr>
+                                    <td>{{ area }}</td>
+                                    <td>{{ stats.total }}</td>
+                                    <td>{{ stats.completed }}</td>
+                                    <td>{{ stats.assigned }}</td>
+                                    <td>{{ stats.pending }}</td>
+                                    <td>
+                                        {% if stats.total > 0 %}
+                                            {{ (stats.completed / stats.total * 100)|round(1) }}%
+                                        {% else %}
+                                            0%
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Performance Table -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Agent Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Agent</th>
+                                <th>Total Orders</th>
+                                <th>Completed</th>
+                                <th>Assigned</th>
+                                <th>Pending</th>
+                                <th>Completion Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for agent_id, stats in agent_stats.items() %}
+                                <tr>
+                                    <td>{{ agent_names.get(agent_id, 'Unknown Agent') }}</td>
+                                    <td>{{ stats.total }}</td>
+                                    <td>{{ stats.completed }}</td>
+                                    <td>{{ stats.assigned }}</td>
+                                    <td>{{ stats.pending }}</td>
+                                    <td>
+                                        {% if stats.total > 0 %}
+                                            {{ (stats.completed / stats.total * 100)|round(1) }}%
+                                        {% else %}
+                                            0%
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Performance Chart -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0">Agent Delivery Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="agentChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Status chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusChart = new Chart(statusCtx, {
+            type: 'pie',
+            data: {
+                labels: ['Completed', 'Assigned', 'Pending'],
+                datasets: [{
+                    data: [{{ completed_orders }}, {{ assigned_orders }}, {{ pending_orders }}],
+                    backgroundColor: [
+                        '#198754',  // Green for completed
+                        '#ffc107',  // Yellow for assigned
+                        '#dc3545'   // Red for pending
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Area chart
+        const areaCtx = document.getElementById('areaChart').getContext('2d');
+        const areaChart = new Chart(areaCtx, {
+            type: 'bar',
+            data: {
+                labels: [
+                    {% for area in area_stats %}
+                        '{{ area }}',
+                    {% endfor %}
+                ],
+                datasets: [
+                    {
+                        label: 'Completed',
+                        data: [
+                            {% for area, stats in area_stats.items() %}
+                                {{ stats.completed }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#198754'
+                    },
+                    {
+                        label: 'Assigned',
+                        data: [
+                            {% for area, stats in area_stats.items() %}
+                                {{ stats.assigned }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#ffc107'
+                    },
+                    {
+                        label: 'Pending',
+                        data: [
+                            {% for area, stats in area_stats.items() %}
+                                {{ stats.pending }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#dc3545'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Agent Performance chart
+        const agentCtx = document.getElementById('agentChart').getContext('2d');
+        const agentChart = new Chart(agentCtx, {
+            type: 'bar',
+            data: {
+                labels: [
+                    {% for agent_id in agent_stats %}
+                        '{{ agent_names.get(agent_id, "Unknown Agent") }}',
+                    {% endfor %}
+                ],
+                datasets: [
+                    {
+                        label: 'Completed',
+                        data: [
+                            {% for agent_id, stats in agent_stats.items() %}
+                                {{ stats.completed }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#198754'
+                    },
+                    {
+                        label: 'Assigned',
+                        data: [
+                            {% for agent_id, stats in agent_stats.items() %}
+                                {{ stats.assigned }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#ffc107'
+                    },
+                    {
+                        label: 'Pending',
+                        data: [
+                            {% for agent_id, stats in agent_stats.items() %}
+                                {{ stats.pending }},
+                            {% endfor %}
+                        ],
+                        backgroundColor: '#dc3545'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

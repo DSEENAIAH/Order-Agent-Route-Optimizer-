@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 text-center">
+                <h1 class="display-4 mb-4">Delivery Management System</h1>
+                <p class="lead mb-5">Efficiently manage your delivery operations with our advanced routing and tracking system.</p>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title">Delivery Agents</h5>
+                                <p class="card-text">Log in to view your assigned deliveries and optimize your routes.</p>
+                                <a href="{{ url_for('login') }}" class="btn btn-primary">Agent Login</a>
+                                <a href="{{ url_for('register') }}" class="btn btn-outline-secondary mt-2">New Agent? Register</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title">Administrators</h5>
+                                <p class="card-text">Log in to manage orders, assign deliveries, and view reports.</p>
+                                <a href="{{ url_for('login') }}" class="btn btn-primary">Admin Login</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-5">
+                    <h3>Key Features</h3>
+                    <div class="row mt-4">
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <h5>Route Optimization</h5>
+                                <p>Automatically calculate the most efficient delivery routes</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <h5>Real-time Tracking</h5>
+                                <p>Track delivery status and agent locations in real-time</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <h5>Customer Notifications</h5>
+                                <p>Automatic updates to customers about their delivery status</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-light py-3 mt-5">
+        <div class="container text-center">
+            <p>© 2025 Delivery Management System</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

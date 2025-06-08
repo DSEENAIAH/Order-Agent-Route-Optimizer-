@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Dashboard | Delivery Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Delivery Management System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('agent_dashboard') }}">Dashboard</a>
+                    </li>
+                </ul>
+                <div class="navbar-text me-3 text-white">
+                    Welcome, {{ session.user.username }}
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn btn-light">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container py-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Delivery Agent Dashboard</h2>
+            <button class="btn btn-success" id="optimizeRouteBtn" onclick="optimizeRoute()">
+                <i class="bi bi-geo-alt"></i> Optimize Route
+            </button>
+        </div>
+
+        <div class="row">
+            <!-- Orders List -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Pending Deliveries <span class="badge bg-primary">{{ pending_orders|length }}</span></h5>
+                    </div>
+                    <div class="card-body">
+                        {% if pending_orders %}
+                            <div class="list-group">
+                                {% for order in pending_orders %}
+                                    <div class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">{{ order.customer_name }}</h6>
+                                            <small class="text-muted">
+                                                <span class="badge {{ 'bg-warning' if order.status == 'assigned' else 'bg-danger' }}">
+                                                    {{ order.status|capitalize }}
+                                                </span>
+                                            </small>
+                                        </div>
+                                        <p class="mb-1">{{ order.address }}</p>
+                                        <div class="d-flex justify-content-between align-items-center mt-2">
+                                            <small class="text-muted">Area: {{ order.area }}</small>
+                                            <button class="btn btn-sm btn-success" onclick="updateOrderStatus('{{ order.id }}', 'completed')">
+                                                <i class="bi bi-check-circle"></i> Mark as Completed
+                                            </button>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">No pending deliveries assigned to you.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Completed Deliveries <span class="badge bg-success">{{ completed_orders|length }}</span></h5>
+                    </div>
+                    <div class="card-body">
+                        {% if completed_orders %}
+                            <div class="list-group">
+                                {% for order in completed_orders %}
+                                    <div class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">{{ order.customer_name }}</h6>
+                                            <small class="text-muted">
+                                                <span class="badge bg-success">Completed</span>
+                                            </small>
+                                        </div>
+                                        <p class="mb-1">{{ order.address }}</p>
+                                        <small class="text-muted">Area: {{ order.area }}</small>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">No completed deliveries yet.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map for Route Visualization -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Optimized Delivery Route</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="map" style="height: 400px;"></div>
+                        <div id="routeDetails" class="mt-3">
+                            <h6>Route Details</h6>
+                            <div id="routeInfo">Click "Optimize Route" to calculate the most efficient delivery path.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="navigationControls" class="mt-3" style="display: none;">
+                    <button id="startNavigationBtn" class="btn btn-primary" onclick="startNavigation()">
+                        <i class="bi bi-signpost-2"></i> Start Navigation
+                    </button>
+                    <button id="stopNavigationBtn" class="btn btn-danger" style="display: none;" onclick="stopNavigation()">
+                        <i class="bi bi-x-circle"></i> End Navigation
+                    </button>
+                </div>
+                
+                <div id="navigationView" class="mt-3" style="display: none;">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Turn-by-Turn Navigation</h6>
+                            <span id="distanceRemaining" class="badge bg-info"></span>
+                        </div>
+                        <div class="card-body">
+                            <div id="streetViewContainer" style="height: 300px;"></div>
+                            <div id="navigationInstructions" class="alert alert-info mt-2">
+                                Ready to navigate
+                            </div>
+                            <!-- Manual Movement Controls -->
+                            <div class="mt-3 border p-3 rounded">
+                                <h6><i class="bi bi-arrow-up-down"></i> Manual Movement</h6>
+                                <div class="d-flex justify-content-between mt-2">
+                                    <button class="btn btn-outline-secondary" onclick="moveManually('previous')">
+                                        <i class="bi bi-arrow-left"></i> Previous Stop
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="sendDeliveryNotification()">
+                                        <i class="bi bi-bell"></i> Send ETA Notification
+                                    </button>
+                                    <button class="btn btn-outline-secondary" onclick="moveManually('next')">
+                                        Next Stop <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Global variables
+        let map;
+        let routeLayer;
+        let currentRoutePoints = [];
+        let currentRouteIndex = 0;
+        let navigationInterval;
+        let simulatedPosition = null;
+        let deliveryMarker;
+        let deliveryLine;
+
+        // Initialize map when page loads
+        document.addEventListener('DOMContentLoaded', initMap);
+
+        // Initialize the map
+        function initMap() {
+            // Center on Mumbai by default
+            map = L.map('map').setView([19.0760, 72.8777], 11);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            routeLayer = L.layerGroup().addTo(map);
+        }
+        
+        // Optimize route
+        function optimizeRoute() {
+            document.getElementById('optimizeRouteBtn').disabled = true;
+            document.getElementById('optimizeRouteBtn').innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Optimizing...';
+            
+            // Show loading state in route info
+            document.getElementById('routeInfo').innerHTML = '<div class="alert alert-info">Calculating optimal route...</div>';
+            
+            fetch('{{ url_for("optimize_route") }}')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("API response:", data); // For debugging
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // Check if route data exists
+                    if (!data.route || !Array.isArray(data.route) || data.route.length === 0) {
+                        throw new Error('No route data available');
+                    }
+                    
+                    // Clear previous route
+                    routeLayer.clearLayers();
+                    
+                    // Add markers for each point
+                    const markers = [];
+                    const routePath = [];
+                    
+                    data.route.forEach((point, index) => {
+                        // Validate point data
+                        if (!point || typeof point.lat === 'undefined' || typeof point.lng === 'undefined') {
+                            console.warn('Invalid point data:', point);
+                            return;
+                        }
+                        
+                        const marker = L.marker([point.lat, point.lng]);
+                        
+                        let popupContent = '';
+                        
+                        if (point.type === 'depot') {
+                            marker.setIcon(L.divIcon({
+                                className: 'depot-icon',
+                                html: '<i class="bi bi-house-fill" style="font-size: 24px; color: #0d6efd;"></i>',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            }));
+                            popupContent = `<strong>${point.info || 'Depot'}</strong>`;
+                        } else {
+                            marker.setIcon(L.divIcon({
+                                className: 'delivery-icon',
+                                html: `<div style="background-color: #198754; color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-weight: bold;">${index}</div>`,
+                                iconSize: [22, 22],
+                                iconAnchor: [11, 11]
+                            }));
+                            
+                            // Check if point.info exists and has necessary data
+                            if (point.info && typeof point.info === 'object') {
+                                // Include order ID in the popup content for later reference
+                                popupContent = `
+                                    <div data-order-id="${point.info.order_id || ''}">
+                                        <strong>${point.info.customer || 'Customer'}</strong><br>
+                                        ${point.info.address || 'Address not available'}<br>
+                                        <small>
+                                            ${point.info.phone ? 'Phone: ' + point.info.phone + '<br>' : ''}
+                                            ${point.info.email ? 'Email: ' + point.info.email : ''}
+                                        </small>
+                                    </div>
+                                `;
+                            } else {
+                                popupContent = '<strong>Delivery Point</strong>';
+                            }
+                        }
+                        
+                        marker.bindPopup(popupContent);
+                        marker.addTo(routeLayer);
+                        markers.push(marker);
+                        
+                        routePath.push([point.lat, point.lng]);
+                    });
+                    
+                    // Draw route line if we have points
+                    if (routePath.length > 1) {
+                        const routeLine = L.polyline(routePath, { color: 'blue', weight: 3 }).addTo(routeLayer);
+                        
+                        // Fit map to route bounds
+                        map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+                    } else if (routePath.length === 1) {
+                        // If only one point, center on it
+                        map.setView(routePath[0], 13);
+                    }
+                    
+                    // Display route details with proper error handling
+                    let routeInfoHtml = `
+                        <div class="alert alert-info">
+                            <p><strong>Total Distance:</strong> ${data.details && data.details.total_distance !== undefined ? data.details.total_distance.toFixed(2) : 'N/A'} km</p>
+                            <p><strong>Estimated Time:</strong> ${data.details && data.details.estimated_time !== undefined ? data.details.estimated_time.toFixed(2) : 'N/A'} hours</p>
+                    `;
+                    
+                    if (data.route.length > 2) {
+                        routeInfoHtml += `<p><strong>Delivery Order:</strong></p><ol>`;
+                        
+                        let hasValidDeliveries = false;
+                        
+                        data.route.slice(1, -1).forEach((point, index) => {
+                            if (point && point.info && point.info.customer && point.info.address) {
+                                routeInfoHtml += `<li>${point.info.customer} - ${point.info.address}</li>`;
+                                hasValidDeliveries = true;
+                            }
+                        });
+                        
+                        if (!hasValidDeliveries) {
+                            routeInfoHtml += `<li>No delivery points available</li>`;
+                        }
+                        
+                        routeInfoHtml += `</ol>`;
+                    }
+                    
+                    routeInfoHtml += `</div>`;
+                    
+                    document.getElementById('routeInfo').innerHTML = routeInfoHtml;
+                    
+                    // Show navigation controls after route optimization
+                    document.getElementById('navigationControls').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('routeInfo').innerHTML = `
+                        <div class="alert alert-danger">
+                            <p><strong>Error:</strong> ${error.message || 'An error occurred while optimizing the route.'}</p>
+                            <p>Please try again or contact support if the problem persists.</p>
+                        </div>
+                    `;
+                })
+                .finally(() => {
+                    document.getElementById('optimizeRouteBtn').disabled = false;
+                    document.getElementById('optimizeRouteBtn').innerHTML = '<i class="bi bi-geo-alt"></i> Optimize Route';
+                });
+        }
+        
+        // Update order status
+        function updateOrderStatus(orderId, status) {
+            if (!orderId) {
+                alert('Invalid order ID');
+                return;
+            }
+            
+            if (confirm('Are you sure you want to mark this order as completed?')) {
+                const formData = new FormData();
+                formData.append('order_id', orderId);
+                formData.append('status', status);
+                
+                fetch('{{ url_for("update_order_status") }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        alert('Order status updated successfully!');
+                        window.location.reload();
+                    } else {
+                        throw new Error(data.error || 'Unknown error occurred');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred: ' + error.message);
+                });
+            }
+        }
+        
+        // Start Navigation
+        function startNavigation() {
+            // Hide start button, show stop button
+            document.getElementById('startNavigationBtn').style.display = 'none';
+            document.getElementById('stopNavigationBtn').style.display = 'inline-block';
+            document.getElementById('navigationView').style.display = 'block';
+            
+            // Get current route points from the map
+            currentRoutePoints = [];
+            routeLayer.eachLayer(layer => {
+                if (layer instanceof L.Marker) {
+                    const position = layer.getLatLng();
+                    const popup = layer._popup ? layer._popup.getContent() : '';
+                    
+                    // Extract order ID from popup if available
+                    let orderId = null;
+                    if (popup && popup.includes('data-order-id')) {
+                        const match = popup.match(/data-order-id="([^"]+)"/);
+                        if (match && match[1]) {
+                            orderId = match[1];
+                        }
+                    }
+                    
+                    currentRoutePoints.push({
+                        lat: position.lat,
+                        lng: position.lng,
+                        popup: popup,
+                        orderId: orderId
+                    });
+                }
+            });
+            
+            // Set initial position at the depot (first point)
+            currentRouteIndex = 0;
+            simulatedPosition = currentRoutePoints[0];
+            
+            // Create a delivery agent marker
+            if (deliveryMarker) {
+                map.removeLayer(deliveryMarker);
+            }
+            
+            deliveryMarker = L.marker([simulatedPosition.lat, simulatedPosition.lng], {
+                icon: L.divIcon({
+                    className: 'agent-icon',
+                    html: '<i class="bi bi-truck" style="font-size: 24px; color: #dc3545;"></i>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                })
+            }).addTo(map);
+            
+            // Create a line to show the path traveled
+            if (deliveryLine) {
+                map.removeLayer(deliveryLine);
+            }
+            
+            deliveryLine = L.polyline([[simulatedPosition.lat, simulatedPosition.lng]], {
+                color: '#dc3545',
+                weight: 4,
+                dashArray: '10, 10',
+                opacity: 0.7
+            }).addTo(map);
+            
+            // Update navigation display
+            updateNavigationDisplay();
+            
+            // Start simulation of movement along the route
+            navigationInterval = setInterval(() => {
+                simulateMovement();
+            }, 5000); // Update every 5 seconds
+        }
+        
+        // Stop Navigation
+        function stopNavigation() {
+            // Clear interval
+            if (navigationInterval) {
+                clearInterval(navigationInterval);
+            }
+            
+            // Hide stop button, show start button
+            document.getElementById('startNavigationBtn').style.display = 'inline-block';
+            document.getElementById('stopNavigationBtn').style.display = 'none';
+            document.getElementById('navigationView').style.display = 'none';
+            
+            // Reset variables
+            currentRouteIndex = 0;
+            simulatedPosition = null;
+            
+            // Remove markers
+            if (deliveryMarker) {
+                map.removeLayer(deliveryMarker);
+                deliveryMarker = null;
+            }
+            
+            if (deliveryLine) {
+                map.removeLayer(deliveryLine);
+                deliveryLine = null;
+            }
+        }
+        
+        // Simulate Movement
+        function simulateMovement() {
+            // If we've reached the end of the route, stop navigation
+            if (currentRouteIndex >= currentRoutePoints.length - 1) {
+                stopNavigation();
+                alert('Delivery route completed!');
+                return;
+            }
+            
+            // Move to the next point in the route
+            currentRouteIndex++;
+            const nextPoint = currentRoutePoints[currentRouteIndex];
+            simulatedPosition = nextPoint;
+            
+            // Update marker position
+            deliveryMarker.setLatLng([nextPoint.lat, nextPoint.lng]);
+            
+            // Add point to the line
+            const linePositions = deliveryLine.getLatLngs();
+            linePositions.push([nextPoint.lat, nextPoint.lng]);
+            deliveryLine.setLatLngs(linePositions);
+            
+            // Check if we've reached a delivery point (not the depot)
+            if (currentRouteIndex > 0 && currentRouteIndex < currentRoutePoints.length - 1) {
+                // This is a delivery point, notify the customer about imminent delivery
+                if (nextPoint.orderId) {
+                    sendDeliveryNotification(nextPoint.orderId);
+                }
+            }
+            
+            // Update the navigation display
+            updateNavigationDisplay();
+        }
+        
+        // Update Navigation Display
+        function updateNavigationDisplay() {
+            // If we're at the end, show completion message
+            if (currentRouteIndex >= currentRoutePoints.length - 1) {
+                document.getElementById('navigationInstructions').innerHTML = 'All deliveries completed!';
+                document.getElementById('distanceRemaining').innerHTML = '0 km remaining';
+                return;
+            }
+            
+            // Get current and next points
+            const currentPoint = currentRoutePoints[currentRouteIndex];
+            const nextPoint = currentRoutePoints[currentRouteIndex + 1];
+            
+            // Calculate remaining distance (rough estimate)
+            let remainingDistance = 0;
+            for (let i = currentRouteIndex; i < currentRoutePoints.length - 1; i++) {
+                const p1 = currentRoutePoints[i];
+                const p2 = currentRoutePoints[i + 1];
+                remainingDistance += calculateDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+            }
+            
+            // Update distance indicator
+            document.getElementById('distanceRemaining').innerHTML = `${remainingDistance.toFixed(2)} km remaining`;
+            
+            // Update instruction text
+            let instructionText = '';
+            if (currentRouteIndex === 0) {
+                // At depot
+                instructionText = `Leaving depot. Next stop: Delivery to customer at next location.`;
+            } else {
+                // At a delivery point
+                const customerInfo = extractCustomerInfo(currentPoint.popup);
+                const nextCustomerInfo = extractCustomerInfo(nextPoint.popup);
+                
+                if (currentRouteIndex === currentRoutePoints.length - 2) {
+                    // Last delivery
+                    instructionText = `Delivering order to ${customerInfo.name}. This is your last delivery.`;
+                } else {
+                    // Middle deliveries
+                    instructionText = `Delivering order to ${customerInfo.name}. Next delivery: ${nextCustomerInfo.name}.`;
+                }
+            }
+            
+            document.getElementById('navigationInstructions').innerHTML = instructionText;
+            
+            // Center map on current position
+            map.panTo([currentPoint.lat, currentPoint.lng]);
+        }
+        
+        // Calculate Distance
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Simple distance calculation using the Haversine formula
+            const R = 6371; // Radius of the Earth in km
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a = 
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R * c; // Distance in km
+            return distance;
+        }
+        
+        // Extract Customer Info
+        function extractCustomerInfo(popupContent) {
+            if (!popupContent) {
+                return { name: 'Unknown Customer', address: 'Unknown Location' };
+            }
+            
+            // Try to parse customer name from the popup
+            let name = 'Unknown Customer';
+            let address = 'Unknown Location';
+            
+            // Basic parsing from HTML content
+            const nameMatch = popupContent.match(/<strong>([^<]+)<\/strong>/);
+            if (nameMatch && nameMatch[1]) {
+                name = nameMatch[1].trim();
+                if (name === 'Depot') {
+                    name = 'Warehouse';
+                }
+            }
+            
+            // Get address (assuming it's between <br> and <br> or <br> and <small>)
+            const addressMatch = popupContent.match(/<br>([^<]+)<(?:br|small)/);
+            if (addressMatch && addressMatch[1]) {
+                address = addressMatch[1].trim();
+            }
+            
+            return { name, address };
+        }
+        
+        // Send Delivery Notification
+        function sendDeliveryNotification(orderId = null) {
+            // Get current position in the route
+            const currentPoint = currentRoutePoints[currentRouteIndex];
+            
+            // If no order ID was provided, try to extract it from the current point
+            if (!orderId && currentPoint && currentPoint.orderId) {
+                orderId = currentPoint.orderId;
+            }
+            
+            // If we still don't have an order ID, use one from the UI if possible
+            if (!orderId) {
+                // Try to get the first pending order from the UI
+                const pendingOrderElements = document.querySelectorAll('.list-group-item button[onclick^="updateOrderStatus"]');
+                if (pendingOrderElements.length > 0) {
+                    const onclickAttr = pendingOrderElements[0].getAttribute('onclick');
+                    const orderIdMatch = onclickAttr.match(/updateOrderStatus\('([^']+)'/);
+                    if (orderIdMatch && orderIdMatch[1]) {
+                        orderId = orderIdMatch[1];
+                    }
+                }
+            }
+            
+            // If we still don't have an order ID, show an error
+            if (!orderId) {
+                alert('Could not determine which order to notify about. Please try again.');
+                return;
+            }
+            
+            // Calculate ETA (estimated time of arrival) - this is a simulation
+            const eta = Math.floor(Math.random() * 30) + 15; // Random ETA between 15-45 minutes
+            
+            // Make an AJAX call to the server to send a notification
+            fetch('/send_delivery_notification', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    order_id: orderId,
+                    eta_minutes: eta
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    alert(`Notification sent successfully to ${data.customer_name}. ETA: ${eta} minutes.`);
+                } else {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send notification: ' + error.message);
+            });
+        }
+        
+        // Move Manually
+        function moveManually(direction) {
+            // Clear any existing interval to prevent conflicts
+            if (navigationInterval) {
+                clearInterval(navigationInterval);
+                navigationInterval = null;
+            }
+            
+            if (direction === 'next') {
+                // Don't proceed beyond the end of the route
+                if (currentRouteIndex >= currentRoutePoints.length - 1) {
+                    alert('You have reached the end of the route.');
+                    return;
+                }
+                
+                // Move to the next point
+                currentRouteIndex++;
+            } else if (direction === 'previous') {
+                // Don't go before the start of the route
+                if (currentRouteIndex <= 0) {
+                    alert('You are at the beginning of the route.');
+                    return;
+                }
+                
+                // Move to the previous point
+                currentRouteIndex--;
+            }
+            
+            // Update position
+            simulatedPosition = currentRoutePoints[currentRouteIndex];
+            
+            // Update marker position
+            deliveryMarker.setLatLng([simulatedPosition.lat, simulatedPosition.lng]);
+            
+            // Update the line
+            const linePositions = deliveryLine.getLatLngs();
+            
+            if (direction === 'next') {
+                // Add new point to line
+                linePositions.push([simulatedPosition.lat, simulatedPosition.lng]);
+            } else {
+                // Remove last point from line
+                linePositions.pop();
+            }
+            
+            deliveryLine.setLatLngs(linePositions);
+            
+            // Update the navigation display
+            updateNavigationDisplay();
+            
+            // Resume the automatic navigation after a manual move (with a 5 second delay)
+            navigationInterval = setInterval(() => {
+                simulateMovement();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
